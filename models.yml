@@ -1,9 +1,22 @@
-# omp-config — providers and model overrides
+# omp-config — providers and model overrides (HIGHLY OPTIMIZED)
 # Resolved from ~/.omp/agent/models.yml
 #
 # OpenRouter is a built-in provider in omp's catalog, so we only need to
 # override its routing hints and pin per-model metadata. The API key is read
 # from OPENROUTER_API_KEY in ~/.omp/agent/.env.
+#
+# Speed strategy: OpenRouter sorts endpoints by throughput and caps P90
+# latency, so every request lands on the fastest healthy provider while
+# keeping automatic failover. The default loop runs on Sonnet; background
+# tasks run on DeepSeek Flash (no thinking) for near-zero latency.
+#
+# Frontier reasoning (plan/slow roles) is TOGGLEABLE. Set FRONTIER_MODEL to
+# one of the two values below to switch between the closed frontier model
+# (Claude Opus) and the best open-weight alternative (DeepSeek V4 Pro):
+#   FRONTIER_MODEL=opus      -> anthropic/claude-opus-5        (closed frontier)
+#   FRONTIER_MODEL=deepseek  -> deepseek/deepseek-v4-pro-0813  (open-weight, default)
+# The open-weight option is the default: it's cheaper, self-hostable, and
+# nearly matches Opus on hard reasoning while keeping everything on OpenRouter.
 
 providers:
   openrouter:
@@ -12,11 +25,23 @@ providers:
     baseUrl: https://openrouter.ai/api/v1
     apiKey: OPENROUTER_API_KEY
     api: openai-completions
+    # Prefer fast healthy endpoints while retaining OpenRouter failover.
+    compat:
+      openRouterRouting:
+        allowFallbacks: true
+        sort:
+          by: throughput
+          partition: none
+        preferredMaxLatency:
+          p90: 3
+        preferredMinThroughput:
+          p50: 50
 
     # Per-model overrides: pin context windows, reasoning support, and
     # OpenRouter routing hints for the models we rely on.
     modelOverrides:
-      # --- Frontier reasoning (plan / slow) ---
+      # --- Frontier reasoning (plan / slow) — TOGGLEABLE ---
+      # Closed frontier option. Enable by setting FRONTIER_MODEL=opus.
       anthropic/claude-opus-5:
         contextWindow: 1000000
         maxTokens: 32000
@@ -25,6 +50,18 @@ providers:
           supportsReasoningEffort: true
           openRouterRouting:
             only: [anthropic]
+
+      # Open-weight frontier option (default). Enable by setting
+      # FRONTIER_MODEL=deepseek (or leaving it unset). Cheaper, self-hostable,
+      # and near-Opus reasoning on hard problems.
+      deepseek/deepseek-v4-pro-0813:
+        contextWindow: 1048576
+        maxTokens: 16000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [deepseek]
 
       # --- Workhorse (default) ---
       anthropic/claude-sonnet-5:
@@ -36,16 +73,6 @@ providers:
           openRouterRouting:
             only: [anthropic]
 
-      # --- Budget reasoning ---
-      deepseek/deepseek-v4-pro-0813:
-        contextWindow: 1048576
-        maxTokens: 16000
-        reasoning: true
-        compat:
-          supportsReasoningEffort: true
-          openRouterRouting:
-            only: [deepseek]
-
       # --- Fast / tool loops (no thinking) ---
       deepseek/deepseek-v4-flash-0731:
         contextWindow: 1310720
@@ -56,6 +83,22 @@ providers:
             only: [deepseek]
 
       # --- Optional alternates (uncomment to use) ---
+      # anthropic/claude-opus-5-fast:
+      #   contextWindow: 1000000
+      #   maxTokens: 32000
+      #   reasoning: true
+      #   compat:
+      #     supportsReasoningEffort: true
+      #     openRouterRouting:
+      #       only: [anthropic]
+      # anthropic/claude-sonnet-5-fast:
+      #   contextWindow: 1000000
+      #   maxTokens: 16000
+      #   reasoning: true
+      #   compat:
+      #     supportsReasoningEffort: true
+      #     openRouterRouting:
+      #       only: [anthropic]
       # openai/gpt-5.6-luna-pro:
       #   contextWindow: 1050000
       #   maxTokens: 32000

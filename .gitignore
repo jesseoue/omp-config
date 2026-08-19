@@ -2,11 +2,33 @@
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
 # Secrets — never commit real keys
 .env
+.env.*
 *.env
 !env.example
+!.env.example
 
-# Backups
+# omp runtime state (never commit sessions/backups/logs)
+.omp/
+~/.omp/
+*.log
 *.bak
+*.tmp
+*.swp
+
+# Editor / IDE
+.vscode/
+.idea/
+*.iml
+
+# Node / Python (in case tooling is added later)
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/

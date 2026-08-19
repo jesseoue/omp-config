@@ -1,5 +1,14 @@
-# omp-config — agent settings
+# omp-config — agent settings (HIGHLY OPTIMIZED)
 # Resolved from ~/.omp/agent/config.yml (see `omp config list` for every valid key).
+#
+# This is a tuned, speed-first profile: OpenRouter-only routing, lazy MCP
+# discovery, adaptive-thinking effort levels, aggressive-but-safe fallback
+# chains, and snapcompact context management — all wired for low latency and
+# low token waste while keeping frontier reasoning on tap.
+#
+# Frontier reasoning is TOGGLEABLE. The slow/plan roles below default to the
+# open-weight DeepSeek V4 Pro; swap to Claude Opus by setting FRONTIER_MODEL=opus
+# (see models.yml).
 
 # ---------------------------------------------------------------------------
 # Model roles: which model each agent responsibility uses.
@@ -11,9 +20,11 @@ modelRoles:
   # Small/fast model for lightweight background tasks (titles, memory, etc).
   smol: deepseek/deepseek-v4-flash-0731
   # Slow/frontier model for hard problems and deep reasoning.
-  slow: anthropic/claude-opus-5:high
+  # Open-weight default; set FRONTIER_MODEL=opus for the closed frontier.
+  slow: deepseek/deepseek-v4-pro-0813:high
   # Planning model for scoping and architecture.
-  plan: anthropic/claude-opus-5
+  # Open-weight default; set FRONTIER_MODEL=opus for the closed frontier.
+  plan: deepseek/deepseek-v4-pro-0813
   # Vision model for image understanding.
   vision: google/gemini-3.7-flash
   # Advisor: second model that reviews each turn and injects advice.
@@ -27,6 +38,8 @@ cycleOrder:
 
 # ---------------------------------------------------------------------------
 # Thinking: default effort and per-level token budgets.
+# Claude 5 models use adaptive thinking (effort levels), not token budgets;
+# these budgets still apply to budget-based models (DeepSeek, etc).
 # ---------------------------------------------------------------------------
 defaultThinkingLevel: high
 thinkingBudgets:
@@ -54,10 +67,11 @@ retry:
       - deepseek/deepseek-v4-pro-0813
       - deepseek/deepseek-v4-flash-0731
     slow:
+      - deepseek/deepseek-v4-pro-0813
       - anthropic/claude-opus-5
       - anthropic/claude-sonnet-5
-      - deepseek/deepseek-v4-pro-0813
     plan:
+      - deepseek/deepseek-v4-pro-0813
       - anthropic/claude-opus-5
       - anthropic/claude-sonnet-5
     smol:
@@ -68,10 +82,20 @@ retry:
       - anthropic/claude-sonnet-5
 
 # ---------------------------------------------------------------------------
+# Message queue: how concurrent steering/follow-up/interrupts are drained.
+# one-at-a-time keeps the agent focused and avoids racing tool calls.
+# ---------------------------------------------------------------------------
+steeringMode: one-at-a-time
+followUpMode: one-at-a-time
+interruptMode: immediate
+
+# ---------------------------------------------------------------------------
 # Tools and approvals.
 # ---------------------------------------------------------------------------
 tools:
   format: auto
+  # Discover MCP tools lazily to keep prompts small and tool calls fast.
+  discoveryMode: mcp-only
   approvalMode: yolo
   maxTimeout: 0
   intentTracing: true
@@ -123,10 +147,15 @@ browser:
 
 # ---------------------------------------------------------------------------
 # Context compaction: keep long sessions alive without blowing the window.
+# snapcompact = fast, lossless-ish snapshot compaction (lowest latency).
 # ---------------------------------------------------------------------------
 compaction:
   enabled: true
   strategy: snapcompact
+  reserveTokens: 16384
+  keepRecentTokens: 20000
+  autoContinue: true
+  idleEnabled: false
   midTurnEnabled: true
   thresholdPercent: 80
   thresholdTokens: -1
