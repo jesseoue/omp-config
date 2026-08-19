@@ -280,9 +280,12 @@ env_set_key() {
   local file="$1" key="$2" val="$3"
   if [[ -f "$file" ]] && grep -qE "^${key}=" "$file" 2>/dev/null; then
     # Replace in place via awk (safe for special characters in values).
+    # -F= is load-bearing: with the default whitespace separator, $1 of
+    # "KEY=" is "KEY=" (including the =) and never matches, so the write
+    # silently no-ops against template lines.
     # Use a unique temporary file so concurrent installers cannot collide.
     local tmp_file="${file}.tmp.$$"
-    awk -v k="$key" -v v="$val" '
+    awk -F= -v k="$key" -v v="$val" '
       $1 == k { print k "=" v; next }
       { print }
     ' "$file" >"$tmp_file" && mv "$tmp_file" "$file"
