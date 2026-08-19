@@ -1,8 +1,20 @@
 # omp-config
 
-> **A highly optimized, batteries-included config for [omp](https://omp.sh) (Oh My Pi) · [OpenRouter](https://openrouter.ai) · [Context7](https://context7.com).** OpenRouter-only model gateway, curated model roles, automatic fallback chains, tuned thinking budgets, health-verified provider pinning, Context7 library-docs MCP, and a hardened one-step installer — one install, zero drift, maximum speed.
+> **The batteries-included config that turns [omp](https://omp.sh) (Oh My Pi) into a production-grade AI coding agent.**
 
-**Keywords:** omp config · Oh My Pi · OpenRouter gateway · Context7 MCP · AI agent config · LLM model routing · multi-agent coding · Claude · DeepSeek · GLM · Z.ai · Gemini · Hermes 4 · uncensored model role · Exa web search · fallback chains · cost-aware routing · provider pinning · fp8 endpoints · lazy tool discovery · snapcompact · low-latency · speed-optimized · adaptive thinking · open-weight frontier · self-hostable LLM · one-step installer · idempotent install · hardened installer · AI-driven doctor · dotfiles · developer tooling · coding agent · terminal AI · model roles · thinking budgets · context compaction · MCP server · library docs
+[![CI](https://github.com/jesseoue/omp-config/actions/workflows/ci.yml/badge.svg)](https://github.com/jesseoue/omp-config/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![ShellCheck](https://img.shields.io/badge/shellcheck-passing-brightgreen.svg)](https://github.com/koalaman/shellcheck)
+[![OpenRouter](https://img.shields.io/badge/OpenRouter-gateway-8b5cf6.svg)](https://openrouter.ai)
+[![Context7](https://img.shields.io/badge/Context7-docs%20MCP-0ea5e9.svg)](https://context7.com)
+
+**One install. Zero drift. Maximum output.** A curated, health-verified config for [omp](https://omp.sh) (Oh My Pi) wired to [OpenRouter](https://openrouter.ai) and [Context7](https://context7.com): an OpenRouter-only model gateway, ten tuned model roles, automatic fallback chains, per-model thinking budgets, provider pinning verified against the live catalog, a Context7 library-docs MCP, and a hardened one-step installer with a full `doctor` health check.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jesseoue/omp-config/main/install.sh | bash
+```
+
+**Keywords:** omp config · Oh My Pi · OpenRouter gateway · Context7 MCP · AI agent config · LLM model routing · multi-agent coding · Claude · DeepSeek · GLM · Z.ai · Gemini · Hermes 4 · uncensored model role · Exa web search · fallback chains · cost-aware routing · provider pinning · fp8 endpoints · lazy tool discovery · snapcompact · low-latency · speed-optimized · adaptive thinking · open-weight models
 
 ---
 
