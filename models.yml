@@ -38,6 +38,12 @@ providers:
     api: openai-completions
     apiKey: OPENROUTER_API_KEY
     authHeader: true
+
+    # modelOverrides only patch models omp already knows from its bundled
+    # catalog or the models.dev feed — they cannot conjure a missing model.
+    # Hermes 4 405B is absent from omp's usable catalog, so it returns
+      # "Model not found" even though OpenRouter lists the model. The
+      # uncensored role therefore runs the bundled Hermes 4 70B.
     modelOverrides:
       # --- Workhorse: default + designer roles ---
       # Claude Sonnet 5 — $2/$10 per M, 1M ctx, 128K max output. The best
@@ -127,23 +133,10 @@ providers:
             only: [z-ai]
 
       # --- Uncensored: the `uncensored` role (content-aware, steerable) ---
-      # Hermes 4 405B (Nous Research) — $1/$3 per M, 131K ctx. Full-parameter
-      # Llama-3.1-405B finetune tuned for steerability, low refusal rates, and
-      # neutral user-directed behavior. Hybrid reasoning, JSON mode, tool use.
-      # Nebius is its only OpenRouter endpoint. maxTokens stays well under the
-      # 131K window so prompt + output always fit.
-      nousresearch/hermes-4-405b:
-        contextWindow: 131072
-        maxTokens: 32768
-        reasoning: true
-        compat:
-          supportsReasoningEffort: true
-          openRouterRouting:
-            only: [nebius]
-
-      # Hermes 4 70B — $0.13/$0.40 per M, 131K ctx: same Hermes 4 recipe at
-      # ~1/8 the price. The uncensored role's fallback, and the pick when you
-      # want steerable output without 405B latency. Nebius fp8, 100% uptime.
+      # Hermes 4 70B — $0.13/$0.40 per M, 131K ctx: the uncensored role's
+      # model. Same Hermes 4 recipe as the unavailable 405B at ~1/8 the price,
+      # tuned for steerability, low refusal rates, and neutral user-directed
+      # behavior. Nebius fp8, 100% uptime.
       nousresearch/hermes-4-70b:
         contextWindow: 131072
         maxTokens: 32768

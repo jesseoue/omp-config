@@ -21,6 +21,11 @@
 *.tmp
 *.swp
 
+# omp writes settings through the symlink and drops lockfiles next to the
+# real files — runtime junk, never commit
+*.yml.lock
+mcp.json.lock
+
 # Editor / IDE
 .vscode/
 .idea/

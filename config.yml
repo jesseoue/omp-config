@@ -6,10 +6,15 @@
 # snapcompact context management — low latency and low token waste while
 # keeping frontier reasoning on tap.
 #
+# NOTE: omp writes settings changes back THROUGH the symlink (stripping these
+# comments), so UI tweaks land as a dirty diff in this repo. Keep what you
+# want (commit it) or restore the curated file (git checkout config.yml);
+# `./install.sh doctor` warns when the tree has drifted.
+#
 # Frontier reasoning: the slow/plan roles default to the open-weight
-# DeepSeek V4 Pro (near-Opus reasoning at ~1/6 the price). Prefer the closed
-# frontier? Change both roles below to anthropic/claude-opus-5 — it is already
-# pinned in models.yml and wired as their first fallback.
+# DeepSeek V4 Pro 0813 (near-Opus reasoning at ~1/6 the price). Prefer the
+# closed frontier? Change both roles below to openrouter/anthropic/claude-opus-5 — it is
+# already pinned in models.yml and wired as their first fallback.
 
 # ---------------------------------------------------------------------------
 # Model roles: which model each agent responsibility uses.
@@ -18,30 +23,31 @@
 # ---------------------------------------------------------------------------
 modelRoles:
   # Default model for general turns and the main agent loop.
-  default: anthropic/claude-sonnet-5
+  default: openrouter/anthropic/claude-sonnet-5
   # Small/fast model for lightweight background tasks (titles, memory, etc).
-  smol: deepseek/deepseek-v4-flash-0731
-  # Slow/frontier model for hard problems and deep reasoning.
-  slow: deepseek/deepseek-v4-pro-0813:high
-  # Planning model for scoping and architecture.
-  plan: deepseek/deepseek-v4-pro-0813
+  smol: openrouter/deepseek/deepseek-v4-flash-0731
+  # Slow/frontier model for hard problems and deep reasoning (0813 GA build).
+  slow: openrouter/deepseek/deepseek-v4-pro-0813:high
+  # Planning model for scoping and architecture (0813 GA build).
+  plan: openrouter/deepseek/deepseek-v4-pro-0813
   # Vision model for image understanding (screenshots, diagrams, UI).
-  vision: google/gemini-3.7-flash
+  vision: openrouter/google/gemini-3.7-flash
   # Advisor: second model that reviews each turn and injects advice.
   # Deliberately a DIFFERENT family than `default` — a diverse reviewer
   # catches mistakes a same-model reviewer rubber-stamps — and cheaper per
   # token than running Sonnet twice.
-  advisor: deepseek/deepseek-v4-pro-0813:low
+  advisor: openrouter/deepseek/deepseek-v4-pro-0813:low
   # Design/frontend tasks — Sonnet pairs vision with the strongest UI taste.
-  designer: anthropic/claude-sonnet-5
+  designer: openrouter/anthropic/claude-sonnet-5
   # Commit messages — cheap and fast; no reasoning needed.
   commit: "@smol"
   # Micro-tasks (online titles, memory, classifiers).
   tiny: "@smol"
   # Custom role: uncensored/steerable open-weight writing + analysis.
   # Select it from the model picker ("Uncensored") or with @uncensored.
-  # Hermes 4 405B primary; falls back to the $0.13/M Hermes 4 70B.
-  uncensored: nousresearch/hermes-4-405b
+  # Hermes 4 70B is bundled and resolves deterministically; the 405B model
+  # is currently absent from omp's usable catalog and returns "Model not found".
+  uncensored: openrouter/nousresearch/hermes-4-70b
   # `task` (subagents) is deliberately unset: subtasks inherit the session's
   # active model, which is almost always what you want.
 
@@ -73,7 +79,7 @@ thinkingBudgets:
 
 # ---------------------------------------------------------------------------
 # Retry + fallback: automatic step-down when a model errors or rate-limits.
-# Roles without an explicit chain inherit "default" (commit, tiny, designer).
+# Roles without an explicit chain inherit "default" (designer).
 # ---------------------------------------------------------------------------
 retry:
   enabled: true
@@ -84,39 +90,38 @@ retry:
   fallbackRevertPolicy: cooldown-expiry
   fallbackChains:
     default:
-      - anthropic/claude-sonnet-5
-      - deepseek/deepseek-v4-pro-0813
-      - z-ai/glm-5.3
+      - openrouter/anthropic/claude-sonnet-5
+      - openrouter/deepseek/deepseek-v4-pro-0813
+      - openrouter/z-ai/glm-5.3
     slow:
-      - deepseek/deepseek-v4-pro-0813
-      - anthropic/claude-opus-5
-      - anthropic/claude-sonnet-5
+      - openrouter/deepseek/deepseek-v4-pro-0813
+      - openrouter/anthropic/claude-opus-5
+      - openrouter/anthropic/claude-sonnet-5
     plan:
-      - deepseek/deepseek-v4-pro-0813
-      - anthropic/claude-opus-5
-      - anthropic/claude-sonnet-5
+      - openrouter/deepseek/deepseek-v4-pro-0813
+      - openrouter/anthropic/claude-opus-5
+      - openrouter/anthropic/claude-sonnet-5
     advisor:
-      - deepseek/deepseek-v4-pro-0813
-      - anthropic/claude-sonnet-5
+      - openrouter/deepseek/deepseek-v4-pro-0813
+      - openrouter/anthropic/claude-sonnet-5
     # Background roles fall back to cheap multimodal Flash, never to the
     # frontier — a dead smol endpoint should not silently burn Opus money.
     smol:
-      - deepseek/deepseek-v4-flash-0731
-      - google/gemini-3.7-flash
+      - openrouter/deepseek/deepseek-v4-flash-0731
+      - openrouter/google/gemini-3.7-flash
     commit:
-      - deepseek/deepseek-v4-flash-0731
-      - google/gemini-3.7-flash
+      - openrouter/deepseek/deepseek-v4-flash-0731
+      - openrouter/google/gemini-3.7-flash
     tiny:
-      - deepseek/deepseek-v4-flash-0731
-      - google/gemini-3.7-flash
+      - openrouter/deepseek/deepseek-v4-flash-0731
+      - openrouter/google/gemini-3.7-flash
     vision:
-      - google/gemini-3.7-flash
-      - anthropic/claude-sonnet-5
+      - openrouter/google/gemini-3.7-flash
+      - openrouter/anthropic/claude-sonnet-5
     # Uncensored stays uncensored — never silently fall back to an aligned
     # frontier model (which would refuse the exact prompts this role is for).
     uncensored:
-      - nousresearch/hermes-4-405b
-      - nousresearch/hermes-4-70b
+      - openrouter/nousresearch/hermes-4-70b
 
 # ---------------------------------------------------------------------------
 # Service providers (non-LLM): web search.
@@ -220,7 +225,15 @@ compaction:
   remoteEnabled: true
 
 # ---------------------------------------------------------------------------
-# Memory.
+# Memory. ("off" is quoted deliberately — bare `off` is a YAML 1.1 boolean.)
 # ---------------------------------------------------------------------------
 memory:
-  backend: off
+  backend: "off"
+
+# ---------------------------------------------------------------------------
+# Runtime stamps written by omp itself (kept so setup doesn't re-prompt).
+# ---------------------------------------------------------------------------
+symbolPreset: unicode
+theme:
+  light: light
+setupVersion: 1

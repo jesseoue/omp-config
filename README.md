@@ -25,14 +25,21 @@ Ten pinned roles (plus `task`, deliberately left to inherit the session model):
 | `designer` | `anthropic/claude-sonnet-5` | Design/frontend work (vision + UI taste) |
 | `commit` | `@smol` | Commit messages on the cheap model |
 | `tiny` | `@smol` | Micro-tasks (classifiers, online titles) |
-| `uncensored` | `nousresearch/hermes-4-405b` | Custom role: steerable, low-refusal writing + analysis ($1/$3 per M) |
+| `uncensored` | `nousresearch/hermes-4-70b` | Custom role: steerable, low-refusal writing + analysis ($0.13/$0.40 per M) |
 
 Plus a `cycleOrder` (`smol → default → slow`) for the model switcher. The
 `uncensored` role appears in the model picker as **Uncensored** (via
-`modelTags`) and falls back to Hermes 4 **70B** ($0.13/$0.40 per M) — never to
-an aligned frontier model that would refuse the prompts the role exists for.
-Prefer the Dolphin line instead? `cognitivecomputations/dolphin-mistral-24b-venice-edition`
-is wired as a commented alternate in `models.yml`.
+`modelTags`) and never falls back to an aligned frontier model that would
+refuse the prompts the role exists for.
+
+> **Why 70B and not the 405B flagship?** omp resolves models from its bundled
+> catalog plus the models.dev feed, and `nousresearch/hermes-4-405b` is not
+> materialized in omp's usable catalog — it errors with "Model not found".
+> Hermes 4 **70B** is bundled, resolves
+> deterministically, and was verified with a live completion. If omp's catalog
+> picks up the 405B later, it's a one-line role swap. Prefer the Dolphin line?
+> `cognitivecomputations/dolphin-mistral-24b-venice-edition` is a commented
+> alternate in `models.yml` (also catalog-absent today — same caveat).
 
 > **Why the advisor is not Sonnet:** the advisor reviews the default model's turns.
 > A reviewer from a *different* model family catches mistakes a same-model reviewer
@@ -52,13 +59,13 @@ is wired as a commented alternate in `models.yml`.
 
 - `maxRetries: 10`, exponential backoff `500ms → 300s`
 - `modelFallback: true` with `fallbackRevertPolicy: cooldown-expiry`
-- **Per-role fallback chains** — if a model errors or rate-limits, omp steps down automatically instead of failing:
-  - `default`: Sonnet 5 → DeepSeek V4 Pro → GLM 5.3 *(never below a real coding model)*
-  - `slow` / `plan`: DeepSeek V4 Pro → Opus 5 → Sonnet 5
-  - `advisor`: DeepSeek V4 Pro → Sonnet 5
+- **Per-role fallback chains** — if a model errors or rate-limits, omp steps down automatically instead of failing. Every "DeepSeek V4 Pro" below is the pinned **0813 GA build** (`deepseek/deepseek-v4-pro-0813`) — the rolling un-suffixed alias is never used:
+  - `default`: Sonnet 5 → DeepSeek V4 Pro 0813 → GLM 5.3 *(never below a real coding model)*
+  - `slow` / `plan`: DeepSeek V4 Pro 0813 → Opus 5 → Sonnet 5
+  - `advisor`: DeepSeek V4 Pro 0813 → Sonnet 5
   - `smol` / `commit` / `tiny`: DeepSeek Flash → Gemini 3.7 Flash *(background work never silently burns frontier money)*
   - `vision`: Gemini 3.7 Flash → Sonnet 5
-  - `uncensored`: Hermes 4 405B → Hermes 4 70B *(uncensored stays uncensored)*
+  - `uncensored`: Hermes 4 70B only *(uncensored stays uncensored — it hard-fails rather than falling back to an aligned model)*
   - Any other role inherits the `default` chain.
 
 ### 4. Tools + approvals (`config.yml` → `tools`, `mcp`)
@@ -69,7 +76,7 @@ is wired as a commented alternate in `models.yml`.
 - MCP: `enableProjectConfig: true` (project `.omp/mcp.json` respected), `renderMarkdownResults: true`; MCP tools are discovered on demand by omp's default behavior
 - Built-in tools enabled: `bash`, `eval` (py+js), `lsp` (lazy, diagnostics-on-write), `edit` (hashline + fuzzy match), `read` (summarize), `grep`, `glob`, `fetch`, `web_search`, `browser`
 
-### 4c. Web search (`config.yml` → `providers.webSearchOrder`)
+### 4b. Web search (`config.yml` → `providers.webSearchOrder`)
 
 The `web_search` tool is wired to real providers instead of omp's last-resort
 scrapers (which get bot-challenged on shared IPs):
@@ -80,7 +87,7 @@ scrapers (which get bot-challenged on shared IPs):
 
 No OAuth or extra accounts required; one optional env key upgrades quality.
 
-### 4b. Message queue (`config.yml` → steering/follow-up/interrupt)
+### 4c. Message queue (`config.yml` → steering/follow-up/interrupt)
 
 Keeps the agent focused and avoids racing tool calls for lower latency:
 
@@ -118,8 +125,7 @@ OpenRouter is the **only** provider — every model routes through it.
   - `deepseek/deepseek-v4-flash-0731` — 1M ctx, 16K out, thinking off → fp8 hosts (`deepinfra baseten novita siliconflow parasail`)
   - `google/gemini-3.7-flash` — 1M ctx, 16K out → first-party Google (`google-ai-studio`, `google-vertex`)
   - `z-ai/glm-5.3` — 1M ctx, 32K out, always-on reasoning → `z-ai` *(open-weight coding fallback)*
-  - `nousresearch/hermes-4-405b` — 131K ctx, 32K out → `nebius` *(uncensored role, primary)*
-  - `nousresearch/hermes-4-70b` — 131K ctx, 32K out → `nebius` *(uncensored fallback, ~1/8 the price)*
+  - `nousresearch/hermes-4-70b` — 131K ctx, 32K out → `nebius` *(uncensored role, primary)*
   - Commented alternates, verified live: `anthropic/claude-opus-5-fast`, `openai/gpt-5.6-sol-pro`, `openai/gpt-5.6-luna-pro`, `x-ai/grok-4.20` (2M ctx), `moonshotai/kimi-k3`, `cognitivecomputations/dolphin-mistral-24b-venice-edition` *(uncensored alternate)*
 
 ### 7. Context7 MCP (`mcp.json`)
@@ -210,6 +216,15 @@ If you found this repo by searching one of these errors — yes, it's a real iss
 3. **Provider routing isn't exposed in omp's Settings UI** — pinning must live in
    `models.yml` `compat.openRouterRouting` ([oh-my-pi#7209](https://github.com/can1357/oh-my-pi/issues/7209)).
    This repo is that file, kept healthy by CI.
+4. **`Model "…" not found` for a model OpenRouter clearly serves.** omp only
+   resolves models from its bundled catalog plus the models.dev feed;
+   `modelOverrides` cannot conjure a missing one (e.g.
+   `nousresearch/hermes-4-405b` — currently absent from omp's usable catalog).
+   Pick a bundled sibling, or wait for
+   omp/models.dev to carry it. Also prefer **provider-qualified selectors**
+   (`openrouter/vendor/model`) everywhere — bare ids can silently shadow onto
+   other providers ([oh-my-pi#8832](https://github.com/can1357/oh-my-pi/issues/8832));
+   this config uses the qualified form throughout.
 
 ---
 
@@ -244,6 +259,13 @@ The installer is hardened and idempotent — safe to re-run any time. It:
 | `models.yml` | `~/.omp/agent/models.yml` | symlinked |
 | `mcp.json` | `~/.omp/agent/mcp.json` | symlinked |
 | `env.example` | `~/.omp/agent/.env` | copied once (never overwritten) |
+
+> **Heads-up on drift:** when you change settings inside omp (or its setup
+> wizard runs), omp saves back **through the symlink** — stripping comments and
+> normalizing this repo's `config.yml`. That shows up as a dirty git diff:
+> commit the parts you meant to change, or restore the curated file with
+> `git checkout config.yml`. `./install.sh doctor` warns when the tree has
+> drifted, and omp's `*.lock` strays are gitignored.
 
 ---
 
