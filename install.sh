@@ -556,10 +556,14 @@ ${CHECK_REPORT}"
   [[ -n "$resp" ]] || { opt "AI fix plan unavailable (network)"; return 0; }
   content=""
   if command -v jq >/dev/null 2>&1; then
-    content="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)"
+    # Reasoning models (e.g. DeepSeek Flash) return content:null and put the
+    # text in .reasoning — fall back to that before giving up.
+    content="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // .choices[0].message.reasoning // empty' 2>/dev/null || true)"
   elif command -v python3 >/dev/null 2>&1; then
     content="$(printf '%s' "$resp" | python3 -c 'import sys,json
-try: print(json.load(sys.stdin)["choices"][0]["message"]["content"])
+try:
+    m=json.load(sys.stdin)["choices"][0]["message"]
+    print(m.get("content") or m.get("reasoning") or "")
 except Exception: pass' 2>/dev/null || true)"
   fi
   if [[ -n "$content" ]]; then
