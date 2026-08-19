@@ -2,7 +2,7 @@
 
 > **A highly optimized, batteries-included config for [omp](https://omp.sh) (Oh My Pi) · [OpenRouter](https://openrouter.ai) · [Context7](https://context7.com).** OpenRouter-only model gateway, curated model roles, automatic fallback chains, tuned thinking budgets, lazy MCP discovery, Context7 library-docs MCP, and a hardened one-step installer — one install, zero drift, maximum speed.
 
-**Keywords:** omp config · Oh My Pi · OpenRouter gateway · Context7 MCP · AI agent config · LLM model routing · multi-agent coding · Claude · DeepSeek · Gemini · fallback chains · cost-aware routing · deployment protection · lazy tool discovery · snapcompact · throughput routing · low-latency · speed-optimized · adaptive thinking · open-weight frontier · toggleable frontier model · self-hostable LLM · one-step installer · idempotent install · hardened installer · dotfiles · developer tooling · coding agent · terminal AI · model roles · thinking budgets · context compaction · MCP server · library docs
+**Keywords:** omp config · Oh My Pi · OpenRouter gateway · Context7 MCP · AI agent config · LLM model routing · multi-agent coding · Claude · DeepSeek · GLM · Z.ai · Gemini · fallback chains · cost-aware routing · deployment protection · lazy tool discovery · snapcompact · throughput routing · low-latency · speed-optimized · adaptive thinking · open-weight frontier · toggleable frontier model · self-hostable LLM · one-step installer · idempotent install · hardened installer · dotfiles · developer tooling · coding agent · terminal AI · model roles · thinking budgets · context compaction · MCP server · library docs
 
 ---
 
@@ -24,6 +24,11 @@ Six roles, each with a purpose and a thinking suffix where it matters:
 | `advisor` | `anthropic/claude-sonnet-5:medium` | Second model that reviews each turn |
 
 Plus a `cycleOrder` (`smol → default → slow`) for the model switcher.
+
+> **Non-frontier reasoning is also covered.** `z-ai/glm-5.3` (GLM 5.3 from Z.ai) is
+> wired into `models.yml` as a cheaper open-weight reasoning model — 1M context,
+> always-on thinking (efforts `low`/`high`/`max`). Swap it into `default` or
+> `advisor` when you want strong coding without the closed-frontier price tag.
 
 > **Frontier reasoning is toggleable.** The `slow`/`plan` roles default to the
 > **open-weight** `deepseek/deepseek-v4-pro-0813` (cheaper, self-hostable, near-Opus
@@ -82,11 +87,12 @@ OpenRouter is the **only** provider — every model routes through it.
   - `sort.by: throughput` — prefer fast, healthy endpoints
   - `preferredMaxLatency.p90: 3` — target P90 latency
   - `preferredMinThroughput.p50: 50` — target P50 throughput
-- **Per-model overrides** pin context windows, token caps, reasoning support, and provider routing (`only: [anthropic|deepseek]`):
+- **Per-model overrides** pin context windows, token caps, reasoning support, and provider routing (`only: [anthropic|deepseek|z-ai]`):
   - `anthropic/claude-opus-5` — 1M ctx, 32k max, reasoning *(closed frontier — `FRONTIER_MODEL=opus`)*
   - `anthropic/claude-sonnet-5` — 1M ctx, 16k max, reasoning
   - `deepseek/deepseek-v4-pro-0813` — 1M ctx, 16k max, reasoning *(open-weight frontier — default)*
   - `deepseek/deepseek-v4-flash-0731` — 1.3M ctx, 8k max, no thinking (fast tool loops)
+  - `z-ai/glm-5.3` — 1M ctx, 16k max, always-on reasoning *(open-weight non-frontier alternative)*
   - Optional alternates (commented): `anthropic/claude-opus-5-fast`, `anthropic/claude-sonnet-5-fast`, `openai/gpt-5.6-luna-pro`, `google/gemini-3.7-flash`
 
 ### 7. Context7 MCP (`mcp.json`)

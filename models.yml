@@ -8,7 +8,8 @@
 # Speed strategy: OpenRouter sorts endpoints by throughput and caps P90
 # latency, so every request lands on the fastest healthy provider while
 # keeping automatic failover. The default loop runs on Sonnet; background
-# tasks run on DeepSeek Flash (no thinking) for near-zero latency.
+# tasks run on DeepSeek Flash (no thinking) for near-zero latency. GLM 5.3
+# (z-ai/glm-5.3) is wired in as a cheaper open-weight reasoning alternative.
 #
 # Frontier reasoning (plan/slow roles) is TOGGLEABLE. Set FRONTIER_MODEL to
 # one of the two values below to switch between the closed frontier model
@@ -54,6 +55,12 @@ providers:
       # Open-weight frontier option (default). Enable by setting
       # FRONTIER_MODEL=deepseek (or leaving it unset). Cheaper, self-hostable,
       # and near-Opus reasoning on hard problems.
+      #
+      # NOTE: 0813 is the GA build (Aug 12, 2026) and IS on OpenRouter, served
+      # by 12 providers. We pin to the native `deepseek` provider because it
+      # is the only one that correctly replays `reasoning_content` across
+      # multi-turn tool-call loops. Venice only hosts the older 0423 preview
+      # (not 0813) and its proxy strips reasoning_content -> 400s on tool use.
       deepseek/deepseek-v4-pro-0813:
         contextWindow: 1048576
         maxTokens: 16000
@@ -81,6 +88,35 @@ providers:
         compat:
           openRouterRouting:
             only: [deepseek]
+
+      # --- Non-frontier reasoning (open-weight, always-on thinking) ---
+      # GLM 5.3 from Z.ai: strong coding + long-horizon agent tasks. Reasoning
+      # is always on (efforts low/high/max; max is default). A cheaper
+      # open-weight alternative to Sonnet for the default/advisor roles.
+      z-ai/glm-5.3:
+        contextWindow: 1048576
+        maxTokens: 16000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [z-ai]
+
+      # --- Uncensored (content-aware, steerable, open-weight) ---
+      # Hermes 4 405B (Nous Research) — the frontier-level Hermes, a
+      # full-parameter finetune of Llama-3.1-405B tuned for steerability,
+      # lower refusal rates, and neutral user-directed behavior. Hybrid
+      # reasoning (deliberate or respond directly), JSON mode, function
+      # calling, and tool use. Pinned to the Nebius Token Factory provider.
+      # 131K ctx, 131K max output.
+      nousresearch/hermes-4-405b:
+        contextWindow: 131072
+        maxTokens: 131072
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [nebius]
 
       # --- Optional alternates (uncomment to use) ---
       # anthropic/claude-opus-5-fast:
