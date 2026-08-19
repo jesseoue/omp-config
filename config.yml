@@ -1,18 +1,20 @@
 # omp-config — agent settings (HIGHLY OPTIMIZED)
 # Resolved from ~/.omp/agent/config.yml (see `omp config list` for every valid key).
 #
-# This is a tuned, speed-first profile: OpenRouter-only routing, lazy MCP
-# discovery, adaptive-thinking effort levels, aggressive-but-safe fallback
-# chains, and snapcompact context management — all wired for low latency and
-# low token waste while keeping frontier reasoning on tap.
+# This is a tuned, speed-first profile: OpenRouter-only routing, curated model
+# roles, aggressive-but-safe fallback chains, tuned thinking budgets, and
+# snapcompact context management — low latency and low token waste while
+# keeping frontier reasoning on tap.
 #
-# Frontier reasoning is TOGGLEABLE. The slow/plan roles below default to the
-# open-weight DeepSeek V4 Pro; swap to Claude Opus by setting FRONTIER_MODEL=opus
-# (see models.yml).
+# Frontier reasoning: the slow/plan roles default to the open-weight
+# DeepSeek V4 Pro (near-Opus reasoning at ~1/6 the price). Prefer the closed
+# frontier? Change both roles below to anthropic/claude-opus-5 — it is already
+# pinned in models.yml and wired as their first fallback.
 
 # ---------------------------------------------------------------------------
 # Model roles: which model each agent responsibility uses.
-# Role values may carry a thinking suffix: :minimal :low :medium :high :xhigh :max
+# Role values may carry a thinking suffix (:minimal :low :medium :high :xhigh
+# :max) and may alias another role with "@role" (e.g. "@smol").
 # ---------------------------------------------------------------------------
 modelRoles:
   # Default model for general turns and the main agent loop.
@@ -20,15 +22,34 @@ modelRoles:
   # Small/fast model for lightweight background tasks (titles, memory, etc).
   smol: deepseek/deepseek-v4-flash-0731
   # Slow/frontier model for hard problems and deep reasoning.
-  # Open-weight default; set FRONTIER_MODEL=opus for the closed frontier.
   slow: deepseek/deepseek-v4-pro-0813:high
   # Planning model for scoping and architecture.
-  # Open-weight default; set FRONTIER_MODEL=opus for the closed frontier.
   plan: deepseek/deepseek-v4-pro-0813
-  # Vision model for image understanding.
+  # Vision model for image understanding (screenshots, diagrams, UI).
   vision: google/gemini-3.7-flash
   # Advisor: second model that reviews each turn and injects advice.
-  advisor: anthropic/claude-sonnet-5:medium
+  # Deliberately a DIFFERENT family than `default` — a diverse reviewer
+  # catches mistakes a same-model reviewer rubber-stamps — and cheaper per
+  # token than running Sonnet twice.
+  advisor: deepseek/deepseek-v4-pro-0813:low
+  # Design/frontend tasks — Sonnet pairs vision with the strongest UI taste.
+  designer: anthropic/claude-sonnet-5
+  # Commit messages — cheap and fast; no reasoning needed.
+  commit: "@smol"
+  # Micro-tasks (online titles, memory, classifiers).
+  tiny: "@smol"
+  # Custom role: uncensored/steerable open-weight writing + analysis.
+  # Select it from the model picker ("Uncensored") or with @uncensored.
+  # Hermes 4 405B primary; falls back to the $0.13/M Hermes 4 70B.
+  uncensored: nousresearch/hermes-4-405b
+  # `task` (subagents) is deliberately unset: subtasks inherit the session's
+  # active model, which is almost always what you want.
+
+# Selector metadata for custom roles (built-ins already have names/colors).
+modelTags:
+  uncensored:
+    name: Uncensored
+    color: accent
 
 # Order the model switcher cycles through.
 cycleOrder:
@@ -39,7 +60,7 @@ cycleOrder:
 # ---------------------------------------------------------------------------
 # Thinking: default effort and per-level token budgets.
 # Claude 5 models use adaptive thinking (effort levels), not token budgets;
-# these budgets still apply to budget-based models (DeepSeek, etc).
+# these budgets still apply to budget-based models (DeepSeek, GLM, etc).
 # ---------------------------------------------------------------------------
 defaultThinkingLevel: high
 thinkingBudgets:
@@ -52,6 +73,7 @@ thinkingBudgets:
 
 # ---------------------------------------------------------------------------
 # Retry + fallback: automatic step-down when a model errors or rate-limits.
+# Roles without an explicit chain inherit "default" (commit, tiny, designer).
 # ---------------------------------------------------------------------------
 retry:
   enabled: true
@@ -61,11 +83,10 @@ retry:
   modelFallback: true
   fallbackRevertPolicy: cooldown-expiry
   fallbackChains:
-    # Any role without an explicit chain inherits "default".
     default:
       - anthropic/claude-sonnet-5
       - deepseek/deepseek-v4-pro-0813
-      - deepseek/deepseek-v4-flash-0731
+      - z-ai/glm-5.3
     slow:
       - deepseek/deepseek-v4-pro-0813
       - anthropic/claude-opus-5
@@ -74,12 +95,42 @@ retry:
       - deepseek/deepseek-v4-pro-0813
       - anthropic/claude-opus-5
       - anthropic/claude-sonnet-5
+    advisor:
+      - deepseek/deepseek-v4-pro-0813
+      - anthropic/claude-sonnet-5
+    # Background roles fall back to cheap multimodal Flash, never to the
+    # frontier — a dead smol endpoint should not silently burn Opus money.
     smol:
       - deepseek/deepseek-v4-flash-0731
-      - deepseek/deepseek-v4-pro-0813
+      - google/gemini-3.7-flash
+    commit:
+      - deepseek/deepseek-v4-flash-0731
+      - google/gemini-3.7-flash
+    tiny:
+      - deepseek/deepseek-v4-flash-0731
+      - google/gemini-3.7-flash
     vision:
       - google/gemini-3.7-flash
       - anthropic/claude-sonnet-5
+    # Uncensored stays uncensored — never silently fall back to an aligned
+    # frontier model (which would refuse the exact prompts this role is for).
+    uncensored:
+      - nousresearch/hermes-4-405b
+      - nousresearch/hermes-4-70b
+
+# ---------------------------------------------------------------------------
+# Service providers (non-LLM): web search.
+# Exa first — best agent-grade search; works keyless via its MCP fallback and
+# upgrades automatically when EXA_API_KEY is set in .env. Credential-free
+# scrapers (Startpage/Ecosia/DuckDuckGo) remain as backups; without this
+# ordering omp lands directly on the scrapers, which get bot-challenged.
+# ---------------------------------------------------------------------------
+providers:
+  webSearchOrder:
+    - exa
+    - startpage
+    - ecosia
+    - duckduckgo
 
 # ---------------------------------------------------------------------------
 # Message queue: how concurrent steering/follow-up/interrupts are drained.
@@ -94,17 +145,24 @@ interruptMode: immediate
 # ---------------------------------------------------------------------------
 tools:
   format: auto
-  # Discover MCP tools lazily to keep prompts small and tool calls fast.
-  discoveryMode: mcp-only
   approvalMode: yolo
   maxTimeout: 0
   intentTracing: true
 
+# MCP: keep prompts small by loading project config on demand and rendering
+# non-JSON results as Markdown. (MCP tools are already discovered on demand
+# by default; there is no separate "lazy discovery" toggle.)
+mcp:
+  enableProjectConfig: true
+  renderMarkdownResults: true
+
 # Individual built-in tools.
 bash:
   enabled: true
+  # Auto-background commands that run >60s (builds, test suites) so the agent
+  # keeps working instead of blocking the loop on a long command.
   autoBackground:
-    enabled: false
+    enabled: true
     thresholdMs: 60000
 
 eval:

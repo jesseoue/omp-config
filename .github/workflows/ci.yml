@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly endpoint-drift check (Mon 06:17 UTC): fails if any pinned
+    # OpenRouter provider goes unhealthy, so rot is caught automatically.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S warning install.sh
+      - name: bash syntax
+        run: bash -n install.sh
+      - name: yaml + json parse
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'EOF'
+          import yaml, json
+          cfg = yaml.safe_load(open("config.yml"))
+          assert cfg["modelRoles"], "modelRoles missing"
+          assert cfg["retry"]["fallbackChains"], "fallbackChains missing"
+          models = yaml.safe_load(open("models.yml"))
+          assert models["providers"]["openrouter"]["modelOverrides"], "modelOverrides missing"
+          json.load(open("mcp.json"))
+          print("configs parse OK")
+          EOF
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install → fix → status → uninstall (sandbox HOME)
+        run: |
+          export HOME="$RUNNER_TEMP/fakehome"
+          mkdir -p "$HOME"
+          bash install.sh --yes --skip-verify
+          test -L "$HOME/.omp/agent/config.yml"
+          test -L "$HOME/.omp/agent/models.yml"
+          test -L "$HOME/.omp/agent/mcp.json"
+          test -f "$HOME/.omp/agent/.env"
+          bash install.sh fix
+          bash install.sh status
+          bash install.sh uninstall --yes
+          test ! -e "$HOME/.omp/agent/config.yml"
+          echo "smoke OK"
+
+  endpoints:
+    # Live check of every provider pin in models.yml against the public
+    # OpenRouter endpoints API. Scheduled + manual only (not per-push).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pinned provider health
+        run: |
+          export HOME="$RUNNER_TEMP/fakehome"
+          mkdir -p "$HOME"
+          bash install.sh verify --no-ai

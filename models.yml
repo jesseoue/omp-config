@@ -1,48 +1,61 @@
 # omp-config — providers and model overrides (HIGHLY OPTIMIZED)
 # Resolved from ~/.omp/agent/models.yml
 #
-# OpenRouter is a built-in provider in omp's catalog, so we only need to
-# override its routing hints and pin per-model metadata. The API key is read
-# from OPENROUTER_API_KEY in ~/.omp/agent/.env.
+# OpenRouter is the ONLY provider: one key, every frontier + open-weight model,
+# automatic endpoint failover. omp bundles OpenRouter in its model catalog and
+# merges the live models.dev feed at startup, so the overrides below patch
+# models omp already knows about — they never need to re-define them.
 #
-# Speed strategy: OpenRouter sorts endpoints by throughput and caps P90
-# latency, so every request lands on the fastest healthy provider while
-# keeping automatic failover. The default loop runs on Sonnet; background
-# tasks run on DeepSeek Flash (no thinking) for near-zero latency. GLM 5.3
-# (z-ai/glm-5.3) is wired in as a cheaper open-weight reasoning alternative.
+# omp also sends OpenRouter cache + attribution headers on its own
+# (X-OpenRouter-Cache: true, TTL 3600, HTTP-Referer omp.sh) — no env vars or
+# extra headers needed here.
 #
-# Frontier reasoning (plan/slow roles) is TOGGLEABLE. Set FRONTIER_MODEL to
-# one of the two values below to switch between the closed frontier model
-# (Claude Opus) and the best open-weight alternative (DeepSeek V4 Pro):
-#   FRONTIER_MODEL=opus      -> anthropic/claude-opus-5        (closed frontier)
-#   FRONTIER_MODEL=deepseek  -> deepseek/deepseek-v4-pro-0813  (open-weight, default)
-# The open-weight option is the default: it's cheaper, self-hostable, and
-# nearly matches Opus on hard reasoning while keeping everything on OpenRouter.
+# Provider pinning: `compat.openRouterRouting.only` restricts each model to
+# healthy, full-precision (fp8+) endpoints so quality and context length stay
+# deterministic. `only`/`order` are the only routing knobs omp exposes; the
+# lists below map 1:1 onto OpenRouter's native `provider.only` field.
+#
+# Endpoint facts (uptime, quantization, output caps) were verified against the
+# live OpenRouter catalog on 2026-08-19. Re-check occasionally with:
+#   curl -s https://openrouter.ai/api/v1/models/<author>/<slug>/endpoints | jq
 
 providers:
   openrouter:
-    # OpenRouter is OpenAI-compatible; omp already knows its base URL.
-    # We keep this explicit for clarity and to allow a self-hosted gateway.
+    # Pin the transport explicitly. omp's built-in `openrouter` entry defaults
+    # to the OpenAI Responses API (/api/v1/responses), which OpenRouter does not
+    # serve with bearer-key auth — requests go out without an Authorization
+    # header and 401 with "No cookie auth credentials found".
+    #
+    # Two things are required to fix that:
+    #   1. api: openai-completions  -> route every call to /chat/completions
+    #      (the endpoint OpenRouter actually serves with a bearer key). The
+    #      Responses path is also broken upstream for tool calls — see
+    #      https://github.com/can1357/oh-my-pi/issues/8020.
+    #   2. authHeader: true         -> inject "Authorization: Bearer <key>" on
+    #      every request (omp merges it into each model's headers). Without
+    #      this, requests go out headerless — the root cause of the 401.
     baseUrl: https://openrouter.ai/api/v1
-    apiKey: OPENROUTER_API_KEY
     api: openai-completions
-    # Prefer fast healthy endpoints while retaining OpenRouter failover.
-    compat:
-      openRouterRouting:
-        allowFallbacks: true
-        sort:
-          by: throughput
-          partition: none
-        preferredMaxLatency:
-          p90: 3
-        preferredMinThroughput:
-          p50: 50
-
-    # Per-model overrides: pin context windows, reasoning support, and
-    # OpenRouter routing hints for the models we rely on.
+    apiKey: OPENROUTER_API_KEY
+    authHeader: true
     modelOverrides:
-      # --- Frontier reasoning (plan / slow) — TOGGLEABLE ---
-      # Closed frontier option. Enable by setting FRONTIER_MODEL=opus.
+      # --- Workhorse: default + designer roles ---
+      # Claude Sonnet 5 — $2/$10 per M, 1M ctx, 128K max output. The best
+      # coding workhorse per dollar on the closed frontier. Pinned to
+      # first-party Anthropic for consistent prompt caching.
+      anthropic/claude-sonnet-5:
+        contextWindow: 1000000
+        maxTokens: 32000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [anthropic]
+
+      # --- Closed frontier: fallback for slow/plan, or swap it in directly ---
+      # Claude Opus 5 — $5/$25 per M, 1M ctx. Wired as the first fallback for
+      # slow/plan in config.yml; to make it primary, set those roles to
+      # anthropic/claude-opus-5 there.
       anthropic/claude-opus-5:
         contextWindow: 1000000
         maxTokens: 32000
@@ -52,101 +65,145 @@ providers:
           openRouterRouting:
             only: [anthropic]
 
-      # Open-weight frontier option (default). Enable by setting
-      # FRONTIER_MODEL=deepseek (or leaving it unset). Cheaper, self-hostable,
-      # and near-Opus reasoning on hard problems.
+      # --- Open-weight frontier: slow / plan / advisor roles ---
+      # DeepSeek V4 Pro (0813 GA build, pinned — zero drift) — $1.32/$3.96
+      # per M. Near-Opus reasoning at ~1/6 the price.
       #
-      # NOTE: 0813 is the GA build (Aug 12, 2026) and IS on OpenRouter, served
-      # by 12 providers. We pin to the native `deepseek` provider because it
-      # is the only one that correctly replays `reasoning_content` across
-      # multi-turn tool-call loops. Venice only hosts the older 0423 preview
-      # (not 0813) and its proxy strips reasoning_content -> 400s on tool use.
+      # Routing: the native `deepseek` endpoint is deranked with 0% recent
+      # uptime on OpenRouter (verified 2026-08-19), and BaseTen serves an fp4
+      # quant — so we pin to full-precision fp8 hosts with 1M ctx, ≥98% uptime,
+      # and ≥384K output caps. maxTokens 65536 leaves plenty of room above the
+      # :high/:xhigh thinking budgets (16K/32K) so reasoning never starves the
+      # final answer.
       deepseek/deepseek-v4-pro-0813:
         contextWindow: 1048576
-        maxTokens: 16000
+        maxTokens: 65536
         reasoning: true
         compat:
           supportsReasoningEffort: true
           openRouterRouting:
-            only: [deepseek]
+            only: [siliconflow, fireworks, novita, parasail, alibaba]
 
-      # --- Workhorse (default) ---
-      anthropic/claude-sonnet-5:
-        contextWindow: 1000000
-        maxTokens: 16000
-        reasoning: true
-        compat:
-          supportsReasoningEffort: true
-          openRouterRouting:
-            only: [anthropic]
-
-      # --- Fast / tool loops (no thinking) ---
+      # --- Fast background: smol / commit / tiny roles (no thinking) ---
+      # DeepSeek V4 Flash (0731 build, pinned) — ~$0.08–0.14/$0.18–0.28 per M.
+      # Near-zero latency for titles, memory, commit messages.
+      # Same story as Pro: the native `deepseek` endpoint is dead and several
+      # hosts serve fp4 quants at 262K ctx, so pin to fp8 hosts serving the
+      # full 1M window. contextWindow matches the pinned endpoints (1048576),
+      # not the catalog max, so compaction triggers before the window fills.
       deepseek/deepseek-v4-flash-0731:
-        contextWindow: 1310720
-        maxTokens: 8000
+        contextWindow: 1048576
+        maxTokens: 16000
         reasoning: false
         compat:
           openRouterRouting:
-            only: [deepseek]
+            only: [deepinfra, baseten, novita, siliconflow, parasail]
 
-      # --- Non-frontier reasoning (open-weight, always-on thinking) ---
-      # GLM 5.3 from Z.ai: strong coding + long-horizon agent tasks. Reasoning
-      # is always on (efforts low/high/max; max is default). A cheaper
-      # open-weight alternative to Sonnet for the default/advisor roles.
-      z-ai/glm-5.3:
+      # --- Vision: vision role ---
+      # Gemini 3.7 Flash — $0.38/$1.88 per M, 1M ctx, 64K output; reads images,
+      # video, audio, and PDFs. Cheapest strong multimodal model in the
+      # catalog. Pinned to first-party Google endpoints (AI Studio + Vertex).
+      google/gemini-3.7-flash:
         contextWindow: 1048576
         maxTokens: 16000
+        reasoning: false
+        compat:
+          openRouterRouting:
+            only: [google-ai-studio, google-vertex]
+
+      # --- Open-weight coding alternative (default-chain fallback) ---
+      # GLM 5.3 from Z.ai — $1.40/$4.40 per M, 1M ctx, always-on reasoning.
+      # Strong coding + long-horizon agent tasks; the fallback when both Sonnet
+      # and DeepSeek Pro are down, and a solid manual swap for `default` if you
+      # want to drop the closed frontier entirely. Z.AI is its only OpenRouter
+      # endpoint today; the pin keeps future quantized re-hosts out.
+      z-ai/glm-5.3:
+        contextWindow: 1048576
+        maxTokens: 32000
         reasoning: true
         compat:
           supportsReasoningEffort: true
           openRouterRouting:
             only: [z-ai]
 
-      # --- Uncensored (content-aware, steerable, open-weight) ---
-      # Hermes 4 405B (Nous Research) — the frontier-level Hermes, a
-      # full-parameter finetune of Llama-3.1-405B tuned for steerability,
-      # lower refusal rates, and neutral user-directed behavior. Hybrid
-      # reasoning (deliberate or respond directly), JSON mode, function
-      # calling, and tool use. Pinned to the Nebius Token Factory provider.
-      # 131K ctx, 131K max output.
+      # --- Uncensored: the `uncensored` role (content-aware, steerable) ---
+      # Hermes 4 405B (Nous Research) — $1/$3 per M, 131K ctx. Full-parameter
+      # Llama-3.1-405B finetune tuned for steerability, low refusal rates, and
+      # neutral user-directed behavior. Hybrid reasoning, JSON mode, tool use.
+      # Nebius is its only OpenRouter endpoint. maxTokens stays well under the
+      # 131K window so prompt + output always fit.
       nousresearch/hermes-4-405b:
         contextWindow: 131072
-        maxTokens: 131072
+        maxTokens: 32768
         reasoning: true
         compat:
           supportsReasoningEffort: true
           openRouterRouting:
             only: [nebius]
 
-      # --- Optional alternates (uncomment to use) ---
+      # Hermes 4 70B — $0.13/$0.40 per M, 131K ctx: same Hermes 4 recipe at
+      # ~1/8 the price. The uncensored role's fallback, and the pick when you
+      # want steerable output without 405B latency. Nebius fp8, 100% uptime.
+      nousresearch/hermes-4-70b:
+        contextWindow: 131072
+        maxTokens: 32768
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [nebius]
+
+      # --- Optional alternates (uncomment to use; verified live 2026-08-19) ---
+      # Claude Opus 5 Fast — $10/$50 per M: same Opus 5, ~2.5x output speed.
       # anthropic/claude-opus-5-fast:
       #   contextWindow: 1000000
       #   maxTokens: 32000
       #   reasoning: true
       #   compat:
       #     supportsReasoningEffort: true
-      #     openRouterRouting:
-      #       only: [anthropic]
-      # anthropic/claude-sonnet-5-fast:
-      #   contextWindow: 1000000
-      #   maxTokens: 16000
+      #
+      # GPT-5.6 Sol Pro — $2.50/$15 per M, 1M ctx: OpenAI's current flagship.
+      # openai/gpt-5.6-sol-pro:
+      #   contextWindow: 1050000
+      #   maxTokens: 32000
       #   reasoning: true
       #   compat:
       #     supportsReasoningEffort: true
-      #     openRouterRouting:
-      #       only: [anthropic]
+      #
+      # GPT-5.6 Luna Pro — $0.20/$1.20 per M, 1M ctx: absurdly cheap reasoner;
+      # a candidate smol/advisor swap.
       # openai/gpt-5.6-luna-pro:
       #   contextWindow: 1050000
       #   maxTokens: 32000
       #   reasoning: true
       #   compat:
       #     supportsReasoningEffort: true
-      #     openRouterRouting:
-      #       only: [openai]
-      # google/gemini-3.7-flash:
+      #
+      # Grok 4.20 — $1.25/$2.50 per M with a 2M context window: the biggest
+      # usable window in the catalog; handy for whole-repo context work.
+      # x-ai/grok-4.20:
+      #   contextWindow: 2000000
+      #   maxTokens: 32000
+      #   reasoning: true
+      #   compat:
+      #     supportsReasoningEffort: true
+      #
+      # Kimi K3 (Moonshot) — $3/$15 per M, 1M ctx: strongest open-weight
+      # generalist after DeepSeek V4 Pro.
+      # moonshotai/kimi-k3:
       #   contextWindow: 1048576
-      #   maxTokens: 8000
+      #   maxTokens: 32000
+      #   reasoning: true
+      #   compat:
+      #     supportsReasoningEffort: true
+      #
+      # Dolphin Mistral 24B Venice Edition — $0.20/$0.90 per M, 128K ctx: the
+      # classic "most uncensored" Dolphin line; an alternative swap for the
+      # uncensored role. Venice (fp16) is its only endpoint, 100% uptime.
+      # cognitivecomputations/dolphin-mistral-24b-venice-edition:
+      #   contextWindow: 128000
+      #   maxTokens: 16000
       #   reasoning: false
       #   compat:
       #     openRouterRouting:
-      #       only: [google]
+      #       only: [venice]
