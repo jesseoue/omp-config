@@ -1,0 +1,73 @@
+# omp-config — providers and model overrides
+# Resolved from ~/.omp/agent/models.yml
+#
+# OpenRouter is a built-in provider in omp's catalog, so we only need to
+# override its routing hints and pin per-model metadata. The API key is read
+# from OPENROUTER_API_KEY in ~/.omp/agent/.env.
+
+providers:
+  openrouter:
+    # OpenRouter is OpenAI-compatible; omp already knows its base URL.
+    # We keep this explicit for clarity and to allow a self-hosted gateway.
+    baseUrl: https://openrouter.ai/api/v1
+    apiKey: OPENROUTER_API_KEY
+    api: openai-completions
+
+    # Per-model overrides: pin context windows, reasoning support, and
+    # OpenRouter routing hints for the models we rely on.
+    modelOverrides:
+      # --- Frontier reasoning (plan / slow) ---
+      anthropic/claude-opus-5:
+        contextWindow: 1000000
+        maxTokens: 32000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [anthropic]
+
+      # --- Workhorse (default) ---
+      anthropic/claude-sonnet-5:
+        contextWindow: 1000000
+        maxTokens: 16000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [anthropic]
+
+      # --- Budget reasoning ---
+      deepseek/deepseek-v4-pro-0813:
+        contextWindow: 1048576
+        maxTokens: 16000
+        reasoning: true
+        compat:
+          supportsReasoningEffort: true
+          openRouterRouting:
+            only: [deepseek]
+
+      # --- Fast / tool loops (no thinking) ---
+      deepseek/deepseek-v4-flash-0731:
+        contextWindow: 1310720
+        maxTokens: 8000
+        reasoning: false
+        compat:
+          openRouterRouting:
+            only: [deepseek]
+
+      # --- Optional alternates (uncomment to use) ---
+      # openai/gpt-5.6-luna-pro:
+      #   contextWindow: 1050000
+      #   maxTokens: 32000
+      #   reasoning: true
+      #   compat:
+      #     supportsReasoningEffort: true
+      #     openRouterRouting:
+      #       only: [openai]
+      # google/gemini-3.7-flash:
+      #   contextWindow: 1048576
+      #   maxTokens: 8000
+      #   reasoning: false
+      #   compat:
+      #     openRouterRouting:
+      #       only: [google]

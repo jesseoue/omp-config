@@ -1,0 +1,12 @@
+# omp-config
+
+# macOS
+.DS_Store
+
+# Secrets — never commit real keys
+.env
+*.env
+!env.example
+
+# Backups
+*.bak
