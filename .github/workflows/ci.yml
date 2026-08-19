@@ -33,6 +33,18 @@ jobs:
           print("configs parse OK")
           EOF
 
+  secrets:
+    # Full-history secret scan — this repo's whole job is keeping keys in
+    # ~/.omp/agent/.env and out of git, so prove it on every push.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   smoke:
     runs-on: ubuntu-latest
     steps:
