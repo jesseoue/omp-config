@@ -107,6 +107,31 @@ Keeps the agent focused and avoids racing tool calls for lower latency:
 - `followUpMode: one-at-a-time` — drain follow-ups serially
 - `interruptMode: immediate` — interrupts fire instantly
 
+### 4d. Agent-loop features (`config.yml` → `advisor`, `task`, `bashInterceptor`, `features`)
+
+Beyond the model roles, these switches make the agent *smarter per turn* — all
+off by default in omp, all enabled here:
+
+- **`advisor.enabled: true`** — the `advisor` role (DeepSeek V4 Pro `:low`) reviews
+  each turn and injects advice before the main model commits. A *different* model
+  family than Sonnet, so it catches mistakes a same-model reviewer rubber-stamps.
+- **`task.prewalk: true`** — the agent walks the repo tree before its first action,
+  so it navigates without a burst of glob/read round-trips.
+- **`task.enableLsp: true`** — LSP (language-server) integration: real type/compile
+  diagnostics and go-to-definition instead of the model guessing.
+- **`task.enableEffort: true`** — exposes effort levels (`minimal`→`max`) so the
+  model self-selects how hard to think per task.
+- **`includeWorkspaceTree: true`** — injects the repo file tree into the system
+  prompt for faster navigation.
+- **`bashInterceptor.enabled: true`** — redirects shell commands that duplicate
+  built-in tools (`cat`/`head`/`tail` → `read`, `grep`/`rg` → `grep`, `find`/`fd`
+  → `glob`) to the proper tool, which respects `.gitignore` and returns structured
+  output.
+- **`features.unexpectedStopDetection: true`** — recovers from truncated model
+  output instead of silently returning a cut-off answer.
+- **`contextPromotion.enabled: true`** — promotes important context (revisited
+  files, key decisions) so it survives compaction instead of being summarized away.
+
 ### 5. Context compaction (`config.yml` → `compaction`)
 
 Tuned for long-running sessions without blowing the context window:

@@ -64,6 +64,17 @@ cycleOrder:
   - slow
 
 # ---------------------------------------------------------------------------
+# Advisor: a second model reviews each turn and injects advice before the
+# main model commits to a plan. Wired to the `advisor` role above (a cheaper
+# DeepSeek reviewer — a DIFFERENT family than Sonnet, so it catches mistakes
+# a same-model reviewer would rubber-stamp). Off by default in omp; enabled
+# here because the role + fallback chain are already curated.
+# ---------------------------------------------------------------------------
+advisor:
+  enabled: true
+  syncBacklog: "off"
+
+# ---------------------------------------------------------------------------
 # Thinking: default effort and per-level token budgets.
 # Claude 5 models use adaptive thinking (effort levels), not token budgets;
 # these budgets still apply to budget-based models (DeepSeek, GLM, etc).
@@ -76,6 +87,13 @@ thinkingBudgets:
   high: 16384
   xhigh: 32768
   max: 32768
+
+# ---------------------------------------------------------------------------
+# Model prompt context: give the agent a richer view of its environment.
+# includeWorkspaceTree injects the repo file tree into the system prompt so
+# the model can navigate without a round-trip of glob/read calls.
+# ---------------------------------------------------------------------------
+includeWorkspaceTree: true
 
 # ---------------------------------------------------------------------------
 # Retry + fallback: automatic step-down when a model errors or rate-limits.
@@ -170,6 +188,38 @@ bash:
     enabled: true
     thresholdMs: 60000
 
+# Intercept shell commands that duplicate built-in tools (cat/head/tail →
+# read, grep/rg → grep, find/fd → glob) and redirect them to the proper tool,
+# which respects .gitignore and returns structured output. omp ships the
+# patterns; this just turns the interceptor on.
+bashInterceptor:
+  enabled: true
+
+# Detect when a model stops mid-generation (truncated output) and recover
+# with the tiny/unexpectedStop model instead of silently returning a cut-off
+# answer.
+features:
+  unexpectedStopDetection: true
+
+# Pre-walk the repo before the agent acts so it has a mental map of the
+# project layout up front (fewer wasted glob/read round-trips).
+prewalk:
+  enabled: true
+
+# Per-task behavior toggles. These are the switches that actually drive the
+# agent loop (the `prewalk`/`lsp` blocks above are the global gates).
+task:
+  # Walk the repo tree before the first action so the model navigates without
+  # a burst of glob/read round-trips.
+  prewalk: true
+  # Enable LSP (language-server) integration: real type/compile diagnostics
+  # and go-to-definition instead of the model guessing. The `lsp` block above
+  # is already configured; this turns it on per-task.
+  enableLsp: true
+  # Expose effort levels (minimal→max) so the model can self-select how hard
+  # to think per task instead of always running at the default.
+  enableEffort: true
+
 eval:
   py: true
   js: true
@@ -223,6 +273,11 @@ compaction:
   thresholdPercent: 80
   thresholdTokens: -1
   remoteEnabled: true
+
+# Promote important context (files the agent keeps revisiting, key decisions)
+# so it survives compaction instead of being summarized away.
+contextPromotion:
+  enabled: true
 
 # ---------------------------------------------------------------------------
 # Memory. ("off" is quoted deliberately — bare `off` is a YAML 1.1 boolean.)
