@@ -105,6 +105,10 @@ retry:
   baseDelayMs: 500
   maxDelayMs: 300000
   modelFallback: true
+  # Prefer a model with available capacity over a merely earlier fallback.
+  usageAwareFallback: true
+  usageReservePct: 10
+  usageReservePolicy: confirm
   fallbackRevertPolicy: cooldown-expiry
   fallbackChains:
     default:

@@ -46,6 +46,10 @@ NO_AI=false
 # environment also works.
 FORCE_INSTALL="${FORCE_INSTALL:-0}"
 
+# Version string. Bump on user-visible behavior changes; keep in sync with
+# the README badge and the changelog note in the commit message.
+OMP_CONFIG_VERSION="1.0.0"
+
 usage() {
   cat <<'EOF'
 install.sh — omp-config installer + maintenance CLI
@@ -73,6 +77,7 @@ Flags:
   --skip-verify   skip network checks (key ping, endpoint health)
   --no-ai         doctor: skip the AI-generated fix plan
   --force         install: bypass the once-per-week rate limit
+  --version, -V   print version and exit
 
 Env (pre-seed keys, no paste needed):
   OPENROUTER_API_KEY  CONTEXT7_API_KEY
@@ -100,6 +105,7 @@ while [[ $# -gt 0 ]]; do
     --skip-verify) SKIP_VERIFY=true; shift ;;
     --no-ai) NO_AI=true; shift ;;
     --force) FORCE_INSTALL=1; shift ;;
+    --version|-V) echo "omp-config ${OMP_CONFIG_VERSION}"; exit 0 ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "fatal: unknown argument: $1 (try --help)" >&2

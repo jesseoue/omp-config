@@ -183,6 +183,20 @@ That's the whole file — attribution headers, prompt caching, and provider rout
 
 ---
 
+## Contributing and agent guidance
+
+This repository includes [`AGENTS.md`](AGENTS.md), a practical playbook for AI agents and human contributors. It documents the repository map, security boundaries, model/provider verification workflow, installer safety rules, local validation commands, and change-specific recipes.
+
+Before opening a PR:
+
+1. Read `AGENTS.md` and inspect the source of truth for the area you are changing.
+2. Keep credentials in `~/.omp/agent/.env`; never commit or print keys.
+3. Run the relevant shell, YAML/JSON, sandbox installer, and `git diff --check` validations.
+4. Update the README when behavior, commands, model roles, provider pins, or required setup changes.
+5. Treat model availability, prices, endpoint health, and catalog metadata as time-sensitive; verify them before documenting or pinning them.
+
+CI runs shell/config linting, a full-history secret scan, an isolated installer smoke test, and scheduled/manual live endpoint health checks. Use `--skip-verify` for deterministic offline local tests.
+
 ## Install
 
 ### Already cloned
